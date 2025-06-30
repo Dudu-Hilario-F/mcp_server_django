@@ -1,6 +1,84 @@
 # MCP Django Documentation Project
 
-... 
+## API de Busca por Palavra-Chave
+
+Nesta etapa, o objetivo foi construir a primeira versão funcional da API do nosso servidor. Esta API serve como uma "ponte" entre os dados que coletamos e armazenamos no banco de dados e o mundo exterior, permitindo que um cliente faça buscas simples baseadas em texto.
+
+**Tecnologias Utilizadas:**
+* Django
+* Django REST Framework (DRF)
+
+### Componentes Criados
+
+A implementação seguiu o padrão do Django REST Framework, dividindo a lógica em três componentes principais:
+
+#### 1. Serializer (`serializers.py`)
+
+* **Propósito:** Atua como um "tradutor", convertendo os objetos `DocumentChunk` do nosso banco de dados (que são objetos Python) para o formato JSON, que é um formato de texto leve e universal para a web.
+* **Implementação:** Foi criado um `DocumentChunkSerializer` que herda de `serializers.ModelSerializer`, especificando os campos que devem ser incluídos na resposta da API.
+
+    ```python
+    # apps/documentation/serializers.py
+    from rest_framework import serializers
+    from .models import DocumentChunk
+
+    class DocumentChunkSerializer(serializers.ModelSerializer):
+        class Meta:
+            model = DocumentChunk
+            fields = [
+                'id',
+                'title',
+                'content',
+                'source_url',
+                'django_version',
+            ]
+    ```
+
+#### 2. View (`views.py`)
+
+* **Propósito:** É o "cérebro" da API. A View é responsável por receber a requisição do cliente, entender o que ele quer, executar a lógica de busca no banco de dados e retornar uma resposta formatada.
+* **Lógica Implementada:**
+    1.  A view extrai o termo de busca do parâmetro `q` na URL (ex: `?q=models`).
+    2.  Utiliza os `Q objects` do Django para fazer uma busca *case-insensitive* (`__icontains`) no banco de dados, procurando pelo termo no campo `title` **OU** no campo `content`.
+* **Refatoração para Melhores Práticas:** Inicialmente implementada como uma `APIView` básica, a view foi refatorada para usar a classe genérica `generics.ListAPIView` do DRF. Isso tornou o código mais limpo, declarativo e alinhado com os padrões da comunidade.
+
+    ```python
+    # apps/documentation/views.py
+    from django.db.models import Q
+    from rest_framework import generics
+    from .models import DocumentChunk
+    from .serializers import DocumentChunkSerializer
+
+    class SearchAPIView(generics.ListAPIView):
+        serializer_class = DocumentChunkSerializer
+
+        def get_queryset(self):
+            query = self.request.query_params.get('q', None)
+            if query:
+                return DocumentChunk.objects.filter(
+                    Q(title__icontains=query) | Q(content__icontains=query)
+                )
+            return DocumentChunk.objects.none()
+    ```
+
+#### 3. URLs (`urls.py`)
+
+* **Propósito:** Define o "endereço" ou "endpoint" que os clientes usarão para acessar a nossa `SearchAPIView`.
+* **Estrutura:** Foi criada uma rota `search/` dentro do app `documentation`, que por sua vez foi incluída na rota principal do projeto sob o prefixo `api/v1/`.
+* **Endpoint Final:** `http://127.0.0.1:8000/api/v1/search/`
+
+### Como Testar a API
+
+1.  Garanta que o banco de dados foi populado com o comando `manage.py import_docs`.
+2.  Inicie o servidor de desenvolvimento com `python manage.py runserver`.
+3.  Abra um navegador e acesse a URL, passando um termo de busca no parâmetro `q`. Por exemplo:
+    **`http://127.0.0.1:8000/api/v1/search/?q=model`**
+4.  O resultado esperado é a página da API navegável do DRF, exibindo uma lista de resultados em formato JSON.
+
+### Conclusão da Etapa
+
+Ao final desta etapa, temos um servidor com uma API de busca por palavra-chave totalmente funcional. A base está pronta e testada, abrindo caminho para a próxima fase: a implementação da busca semântica para fornecer resultados mais inteligentes e contextuais.
+
 
 ## Troubleshooting e Depuração
 
