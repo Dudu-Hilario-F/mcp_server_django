@@ -1,10 +1,12 @@
 # Projeto MCP-Docs: Meu Co-piloto Pessoal para a Documentação do Django
 
-E aí! Beleza? Esse é o repositório do meu projeto, o MCP-Docs.
+Repositório do MCP-Docs.
 
-A ideia nasceu de uma necessidade minha. Eu sempre acabava perdendo um tempão com `Ctrl+F` na documentação do Django, pulando de página em página. Pensei: "e se eu pudesse ter uma busca mais inteligente, que entendesse o *problema* que eu quero resolver, em vez de só as palavras exatas que eu digito?".
+A ideia nasceu de uma necessidade minha. Eu sempre acabava perdendo um tempão com `Ctrl+F` na documentação do Django, pulando de página em página. 
+Pensei: "e se eu pudesse ter uma busca mais inteligente, que entendesse o *problema* que eu quero resolver, em vez de só as palavras exatas que eu digito? e trazer uma solução profissional baseado no manual do problema".
 
-Foi assim que decidi criar o **MCP-Docs**, um servidor que estuda a documentação do Django e a deixa prontinha para ser consultada por uma IA como o Gemini. A meta é ter um co-piloto que me dê respostas diretas e contextuais e testar o novo produto do google Gemeni CLI.
+Foi assim que decidi criar o **MCP-Docs**, um servidor que estuda a documentação do Django e a deixa prontinha para ser consultada por qualquer IA que esta utilizando no momento. 
+A meta é ter um co-piloto que me dê respostas diretas e contextuais sobre a documentação que me ajude a resolver um determinado problema e testar o novo produto do google `Gemeni CLI`.
 
 ## 🤔 A Ideia: Por que esse projeto existe?
 
@@ -13,13 +15,13 @@ O objetivo que tracei foi simples: criar um sistema que:
 2.  Guardasse esse conhecimento de uma forma "inteligente", com contexto.
 3.  Disponibilizasse uma API para que um cliente de IA pudesse fazer perguntas e me dar as respostas.
 
-A missão: aposentar o `Ctrl+F` e buscar por **significado** e me dar uma resposta mais precisa para melhorar minha produtividade.
+A missão: aposentar o `Ctrl+F` e buscar por **significado** na internet e foruns e me dar uma resposta mais precisa para melhorar minha produtividade na linguagem em que o projeto esta sendo desenvolvido.
 
 ### 🧐 Mas... a IA não podia fazer tudo isso sozinha?
 
-;Uma dúvida gigante que você pode esta pensando agora: "Se o Gemini é tão inteligente, por que eu preciso construir todo esse sistema? Ele não poderia simplesmente ir ao site do Django e encontrar as respostas sozinho?".
+Uma dúvida gigante que você pode esta pensando agora: 
+`"Se o Gemini é tão inteligente, por que eu preciso construir todo esse sistema? Ele não poderia simplesmente ir ao site do Django e encontrar as respostas sozinho?".`
 
-Essa é a grande motivação do projeto. 
 A resposta é **não**, e entender o porquê é entender o motivo pelo qual o MCP-Docs é tão útil.
 
 Pensei nisso da seguinte forma: a IA é como um professor universitário genial, que leu uma biblioteca inteira de livros até o dia em que se formou. Ele sabe MUITO, mas sobre o que ele estudou **até aquela data**.
@@ -42,11 +44,11 @@ Então, o MCP-Docs não é um concorrente da IA; ele é o melhor amigo dela. Ele
 
 Beleza, o MCP-Docs está funcionando e a busca semântica é incrível. Mas aí bateu outra dúvida: o Django lança uma nova versão, ou uma página da documentação é corrigida. Como eu garanto que o meu co-piloto não fique "congelado no tempo" com informação velha?
 
-A resposta é que eu preciso de um processo para **re-popular** e **atualizar** o banco de dados. Descobri que existem duas abordagens pra isso: a manual (que já funciona) e a automática (o plano pro futuro).
+A resposta é que eu preciso de um processo para **re-popular** e **atualizar** o banco de dados. Existem duas abordagens pra isso: a manual (que já funciona) e a automática (o plano pro futuro).
 
 ### Como a "Mágica" da Atualização Funciona
 
-Antes de mais nada, uma coisa que eu já tinha preparado no código (e que foi uma mão na roda) é que o script de importação é **inteligente para lidar com atualizações**.
+Antes de mais nada, uma coisa que eu já tinha preparado no código é que o script de importação é **inteligente para lidar com atualizações**.
 
 * No banco de dados do Django, eu usei o comando `update_or_create()`. Isso significa: "Se o `source_url` deste chunk de documento já existe, **atualize** o conteúdo. Se não existe, **crie** um novo."
 * No ChromaDB, eu usei o comando `upsert()`. Ele faz exatamente a mesma coisa: se o ID do chunk já existe, o vetor de embedding é atualizado; senão, um novo é inserido.
@@ -75,7 +77,7 @@ Ainda estudando.
 
 ...
 
-## 🛠️ Minha Caixa de Ferramentas: O que eu usei no projeto
+## 🛠️ Ferramentas: O que eu usei no projeto
 
 Para tirar essa ideia do papel, precisei aprender e usar algumas ferramentas. Cada uma foi uma peça chave no quebra-cabeça:
 
