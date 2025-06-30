@@ -1,35 +1,71 @@
-from django.db.models import Q
-from rest_framework import generics 
+# apps/documentation/views.py
+
+import chromadb
+from sentence_transformers import SentenceTransformer
+
+from django.conf import settings
+from rest_framework import generics
 
 from .models import DocumentChunk
 from .serializers import DocumentChunkSerializer
 
-# A nossa view agora herda de generics.ListAPIView
+# --- Inicialização dos Modelos e do Cliente ChromaDB ---
+# Em um cenário de produção real, carregar estes modelos a cada requisição não é o ideal.
+# Para este projeto, é uma abordagem simples e funcional. Em projetos maiores,
+# estes objetos seriam carregados uma única vez na inicialização do servidor.
+
+# Carregando o modelo
+embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+
+# Conecta-se ao mesmo banco de dados vetorial persistente
+client = chromadb.PersistentClient(path=str(settings.BASE_DIR / "chroma_db"))
+collection = client.get_or_create_collection(name="django_docs")
+
+
 class SearchAPIView(generics.ListAPIView):
     """
-    View da API para buscar nos fragmentos da documentação.
-    Usa o padrão de ListAPIView do DRF para uma implementação mais limpa.
-    Aceita uma query via parâmetro GET 'q'.
-    Ex: /api/v1/search/?q=sua_busca
+    View da API que realiza a BUSCA SEMÂNTICA nos fragmentos da documentação.
     """
-    # Definimos o serializer como um atributo da classe.
     serializer_class = DocumentChunkSerializer
 
     def get_queryset(self):
         """
-        Este método é sobrescrito para controlar o conjunto de dados (queryset)
-        que a view irá retornar. A lógica de busca fica toda aqui.
+        Este método agora executa a busca semântica.
         """
-        # 1. Pega o termo de busca dos parâmetros da URL
         query = self.request.query_params.get('q', None)
 
-        # 2. Se uma query foi fornecida, filtra o banco de dados.
-        if query:
-            # Verifica se a busca não retornou none
-            return DocumentChunk.objects.filter(
-                Q(title__icontains=query) | Q(content__icontains=query)
-            )
+        if not query:
+            # Se não houver query, retorna uma lista vazia.
+            return DocumentChunk.objects.none()
+
+        # 1. Transforma a query do usuário em um vetor de embedding.
+        print(f"Gerando embedding para a query: '{query}'")
+        query_embedding = embedding_model.encode(query).tolist()
+
+        # 2. Faz a busca por similaridade no ChromaDB.
+        # Estamos pedindo os 10 resultados mais próximos.
+        print("Buscando por similaridade no ChromaDB...")
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=10
+        )
+
+        # 3. Extrai os IDs dos resultados.
+        chunk_ids = results.get('ids', [[]])[0]
         
-        # 3. Aqui a listview trata a query vazia caso nenhuma query foi fornecida, retorna um queryset vazio.
-        # A ListAPIView vai lidar com isso e retornar uma lista vazia `[]` 
-        return DocumentChunk.objects.none()
+        if not chunk_ids:
+            return DocumentChunk.objects.none()
+        
+        print(f"IDs encontrados no ChromaDB: {chunk_ids}")
+
+        # 4. Busca os objetos completos no banco de dados Django usando os IDs.
+        # É importante manter a ordem de relevância retornada pelo ChromaDB.
+        chunks_from_db = DocumentChunk.objects.filter(id__in=chunk_ids)
+        
+        # Mapeia os chunks por ID para poder reordenar
+        chunks_map = {str(chunk.id): chunk for chunk in chunks_from_db}
+        
+        # Reordena os objetos
+        ordered_chunks = [chunks_map[id_str] for id_str in chunk_ids if id_str in chunks_map]
+
+        return ordered_chunks
