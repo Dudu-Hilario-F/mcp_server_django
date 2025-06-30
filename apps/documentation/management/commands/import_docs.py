@@ -1,21 +1,40 @@
 import requests
+import chromadb
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+from sentence_transformers import SentenceTransformer
 
 from django.core.management.base import BaseCommand
 from django.utils.text import slugify
+from django.conf import settings
 
 # Importe nosso modelo
 from documentation.models import DocumentChunk
 
 class Command(BaseCommand):
-    help = 'Importa e processa uma página da documentação do Django para o banco de dados.'
+    help = 'Importa, processa e gera embeddings para uma página da documentação do Django.'
 
     def add_arguments(self, parser):
-        parser.add_argument('version', type=str, help='A versão do Django para importar (ex: 4.2).')
+        parser.add_argument('version', type=str, help='A versão do Django a ser importada (ex: 5.2).')
         parser.add_argument('page_path', type=str, help='O caminho da página na documentação (ex: topics/db/models/).')
 
     def handle(self, *args, **options):
+        
+        # --- 1. INICIALIZAÇÃO DOS MODELOS E DO VETOR DB ---
+        self.stdout.write("Inicializando o banco de dados vetorial ChromaDB...")
+
+        # Cria um cliente ChromaDB que salva os dados em disco na pasta 'chroma_db'
+        client = chromadb.PersistentClient(path=str(settings.BASE_DIR / "chroma_db"))
+        
+        # Pega ou cria uma "coleção" (como se fosse uma tabela) para nossos documentos
+        collection = client.get_or_create_collection(name="django_docs")
+        
+        self.stdout.write("Carregando o modelo de embeddings (isso pode levar um momento)...")
+        # Carrega um modelo pré-treinado. 'all-MiniLM-L6-v2' é um ótimo modelo, rápido e de alta qualidade.
+        embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.stdout.write(self.style.SUCCESS("Modelo e DB prontos."))
+
+        # --- 2. LÓGICA DE SCRAPING (como antes) ---
         version = options['version']
         page_path = options['page_path'].strip('/')
         
@@ -36,23 +55,18 @@ class Command(BaseCommand):
             return
 
         soup = BeautifulSoup(response.content, 'html.parser')
-
-        # --- A CORREÇÃO FINAL ESTÁ AQUI ---
-        # Usando o seletor que descobrimos na nossa investigação.
         main_content = soup.find('article', id='docs-content')
 
         if not main_content:
-            # Mensagem de erro atualizada para o seletor correto.
-            self.stderr.write(self.style.ERROR('Não foi possível encontrar o container do conteúdo (article#docs-content). O site pode ter mudado.'))
+            self.stderr.write(self.style.ERROR('Não foi possível encontrar o container do conteúdo (article#docs-content).'))
             return
 
         page_title = main_content.find('h1').text.strip() if main_content.find('h1') else 'Título não encontrado'
-        
         self.stdout.write(f"Título da página: {page_title}")
 
         sections = main_content.find_all('h2')
-        total_chunks = 0
-
+        
+        # --- 3. PROCESSAMENTO, SALVAMENTO E GERAÇÃO DE EMBEDDING ---
         for header in sections:
             section_title = header.text.strip()
             content_pieces = []
@@ -64,9 +78,15 @@ class Command(BaseCommand):
             
             chunk_content = ' '.join(content_pieces)
             
+            # Pula seções vazias que não têm conteúdo útil para a busca
+            if not chunk_content.strip():
+                self.stdout.write(self.style.WARNING(f'  -> Pulando seção vazia: "{section_title}"'))
+                continue
+
             section_id = header.get('id', slugify(section_title))
             chunk_url = f"{scrape_url}#{section_id}"
 
+            # Salva no banco de dados relacional (SQLite/PostgreSQL)
             chunk, created = DocumentChunk.objects.update_or_create(
                 source_url=chunk_url,
                 defaults={
@@ -76,10 +96,20 @@ class Command(BaseCommand):
                 }
             )
 
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'  -> Criado chunk para a seção: "{section_title}"'))
-                total_chunks += 1
-            else:
-                self.stdout.write(self.style.WARNING(f'  -> Atualizado chunk para a seção: "{section_title}"'))
+            # --- 4. A NOVA ETAPA: GERAR E SALVAR O EMBEDDING NO CHROMADB ---
+            self.stdout.write(f'  -> Gerando embedding para a seção: "{section_title}"...')
+            
+            # Gera o vetor a partir do conteúdo do chunk
+            embedding = embedding_model.encode(chunk.content).tolist()
+            
+            # Adiciona (ou atualiza) o vetor no ChromaDB.
+            # Usamos o ID do chunk do nosso banco Django como o ID no ChromaDB
+            # para manter os dois sincronizados.
+            collection.upsert(
+                ids=[str(chunk.id)],
+                embeddings=[embedding],
+                metadatas=[{'title': chunk.title, 'source_url': chunk.source_url}]
+            )
+            self.stdout.write(self.style.SUCCESS(f'  -> Embedding salvo para o chunk ID: {chunk.id}'))
 
-        self.stdout.write(self.style.SUCCESS(f'\nImportação concluída! {total_chunks} novos chunks criados.'))
+        self.stdout.write(self.style.SUCCESS(f'\nImportação e processamento de embeddings concluídos!'))
